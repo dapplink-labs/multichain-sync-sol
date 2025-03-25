@@ -22,4 +22,7 @@ go.work
 go.work.sum
 
 # env file
-.env
+.idea
+./multichain-sync
+/multichain-sync
+*.multichain-sync

@@ -1,0 +1,13 @@
+version: '3.8' # Docker Compose 文件版本
+
+services:
+  db:
+    image: postgres:latest  # 使用官方的 PostgreSQL 镜像
+    container_name: postgres_container
+    environment:
+      POSTGRES_USER: myuser # 设置 PostgreSQL 用户
+      POSTGRES_PASSWORD: mypassword # 设置 PostgreSQL 用户密码
+      POSTGRES_DB: cwallet # 自动创建的数据库名称
+    ports:
+      - "5432:5432" # 将 PostgreSQL 的默认端口映射到主机
+    restart: always # 容器崩溃时自动重启

@@ -5,7 +5,6 @@ import (
 	"math/big"
 	"strconv"
 
-	common2 "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/dapplink-labs/multichain-sync-sol/rpcclient/chain-account/account"
@@ -41,7 +40,7 @@ func (wac *WalletChainAccountClient) ExportAddressByPubKey(typeOrVersion, public
 	return address.Address
 }
 
-func (wac *WalletChainAccountClient) GetBlockHeader(number *big.Int) (*BlockHeader, error) {
+func (wac *WalletChainAccountClient) GetBlockHeader(number *big.Int) (*account.BlockHeaderResponse, error) {
 	var height int64
 	if number == nil {
 		height = 0
@@ -62,20 +61,13 @@ func (wac *WalletChainAccountClient) GetBlockHeader(number *big.Int) (*BlockHead
 		log.Error("get latest block fail", "err", err)
 		return nil, err
 	}
-	blockNumber, _ := new(big.Int).SetString(blockHeader.BlockHeader.Number, 10)
-	header := &BlockHeader{
-		Hash:       common2.HexToHash(blockHeader.BlockHeader.Hash),
-		ParentHash: common2.HexToHash(blockHeader.BlockHeader.ParentHash),
-		Number:     blockNumber,
-		Timestamp:  blockHeader.BlockHeader.Time,
-	}
-	return header, nil
+	return blockHeader, nil
 }
 
-func (wac *WalletChainAccountClient) GetBlockInfo(blockNumber *big.Int) ([]*account.BlockInfoTransactionList, error) {
+func (wac *WalletChainAccountClient) GetBlockInfo(blockNumber uint64) (*account.BlockResponse, error) {
 	req := &account.BlockNumberRequest{
 		Chain:  wac.ChainName,
-		Height: blockNumber.Int64(),
+		Height: int64(blockNumber),
 		ViewTx: true,
 	}
 	blockInfo, err := wac.AccountRpClient.GetBlockByNumber(wac.Ctx, req)
@@ -87,7 +79,7 @@ func (wac *WalletChainAccountClient) GetBlockInfo(blockNumber *big.Int) ([]*acco
 		log.Error("get block info fail", "err", err)
 		return nil, err
 	}
-	return blockInfo.Transactions, nil
+	return blockInfo, nil
 }
 
 func (wac *WalletChainAccountClient) GetTransactionByHash(hash string) (*account.TxMessage, error) {

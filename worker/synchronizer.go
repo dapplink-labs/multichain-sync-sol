@@ -12,6 +12,7 @@ import (
 	"github.com/dapplink-labs/multichain-sync-sol/common/clock"
 	"github.com/dapplink-labs/multichain-sync-sol/database"
 	"github.com/dapplink-labs/multichain-sync-sol/rpcclient"
+	"github.com/dapplink-labs/multichain-sync-sol/rpcclient/chain-account/account"
 )
 
 const TxHandleTaskBatchSize uint64 = 500
@@ -26,16 +27,12 @@ type Config struct {
 type BaseSynchronizer struct {
 	loopInterval     time.Duration
 	headerBufferSize uint64
+	fromBlock        uint64
 
-	rpcClient  *rpcclient.WalletChainAccountClient
-	blockBatch *rpcclient.BatchBlock
-	database   *database.DB
+	rpcClient *rpcclient.WalletChainAccountClient
+	database  *database.DB
 
-	headers []rpcclient.BlockHeader
-	worker  *clock.LoopFn
-
-	fallbackBlockHeader *rpcclient.BlockHeader
-
+	worker     *clock.LoopFn
 	isFallBack bool
 
 	batchWg *sync.WaitGroup
@@ -60,41 +57,21 @@ func (syncer *BaseSynchronizer) Close() error {
 	return syncer.worker.Close()
 }
 
+// 启动的第一次需要取开始的区块
 func (syncer *BaseSynchronizer) tick(ctx context.Context) {
+
 	const batchSize = 500
-	newHeaders, fallBlockHeader, isReorg, err := syncer.blockBatch.NextHeaders(syncer.headerBufferSize)
-	if err != nil {
-		if isReorg && errors.Is(err, rpcclient.ErrBlockFallBack) {
-			if !syncer.isFallBack {
-				log.Warn("found block fallback, start fallback task")
-				syncer.isFallBack = true
-				syncer.fallbackBlockHeader = fallBlockHeader
-			}
-		} else {
-			log.Error("error querying headers", "err", err)
-		}
-		return
-	}
-	if len(newHeaders) == 0 {
-		log.Info("no new headers, already at chain head")
-		return
-	}
-	for i := 0; i < len(newHeaders); i += batchSize {
-		end := i + batchSize
-		if end > len(newHeaders) {
-			end = len(newHeaders)
-		}
-		batch := newHeaders[i:end]
+	var batch []uint64
+	for i := 0; i < 10; i += batchSize {
 		syncer.batchWg.Add(1)
-		go func(batch []rpcclient.BlockHeader) {
+		go func(batch []uint64) {
 			defer syncer.batchWg.Done()
 			for _, h := range batch {
-				block, err := syncer.processHeader(h)
+				block, err := syncer.BatchBlockHandle(0, 0)
 				if err != nil {
-					log.Error("scan block failed", "block", h.Number, "err", err)
 					continue
 				}
-				log.Info("handle block", "blockNumber", block.Number)
+				log.Info("handle block", "h", h, "block", block)
 			}
 			// todo: 处理区块进入到不同的 channel
 		}(batch)
@@ -106,28 +83,25 @@ func (syncer *BaseSynchronizer) tick(ctx context.Context) {
 	}()
 }
 
-func (syncer *BaseSynchronizer) processHeader(header rpcclient.BlockHeader) (*database.Blocks, error) {
-	var txHashList []string
-	txList, err := syncer.rpcClient.GetBlockInfo(header.Number)
-	if err != nil {
-		log.Error("get block info fail", "err", err)
-		return nil, err
+func (syncer *BaseSynchronizer) BatchBlockHandle(startBlock uint64, endBlock uint64) ([]*account.BlockResponse, error) {
+	var blocks []*account.BlockResponse
+	for indexBlock := startBlock; indexBlock < endBlock; indexBlock++ {
+		block, err := syncer.rpcClient.GetBlockInfo(indexBlock)
+		if err != nil {
+			log.Error("get block info fail", "err", err)
+			return nil, err
+		}
+		blocks = append(blocks, block)
 	}
-	for _, txHash := range txList {
-		txHashList = append(txHashList, txHash.Hash)
+	numBlocks := len(blocks)
+	if numBlocks == 0 {
+		return nil, nil
 	}
-	cb := NewChannelBank(1000)
-	var wg sync.WaitGroup
-	err = syncer.ScanBlockTransactions(txHashList, header.Number, header.Hash, cb, &wg)
-	if err != nil {
-		return nil, err
-	}
-	return &database.Blocks{
-		Hash:       header.Hash,
-		ParentHash: header.ParentHash,
-		Number:     header.Number,
-		Timestamp:  header.Timestamp,
-	}, nil
+	return blocks, nil
+}
+
+func (syncer *BaseSynchronizer) processHeader(blocks []*account.BlockResponse) (*database.Blocks, error) {
+	return nil, nil
 }
 
 func (syncer *BaseSynchronizer) ScanBlockTransactions(txHashList []string, blockNumber *big.Int, blockHash string, bank *ChannelBank, wg *sync.WaitGroup) error {

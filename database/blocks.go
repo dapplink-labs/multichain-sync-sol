@@ -5,8 +5,6 @@ import (
 	"math/big"
 
 	"gorm.io/gorm"
-
-	"github.com/dapplink-labs/multichain-sync-sol/rpcclient"
 )
 
 type Blocks struct {
@@ -17,8 +15,8 @@ type Blocks struct {
 }
 
 type BlocksView interface {
-	LatestBlocks() (*rpcclient.BlockHeader, error)
-	QueryBlocksByNumber(*big.Int) (*rpcclient.BlockHeader, error)
+	LatestBlocks() (*Blocks, error)
+	QueryBlocksByNumber(*big.Int) (*Blocks, error)
 }
 
 type BlocksDB interface {
@@ -41,7 +39,7 @@ func (db *blocksDB) StoreBlockss(headers []Blocks) error {
 	return result.Error
 }
 
-func (db *blocksDB) LatestBlocks() (*rpcclient.BlockHeader, error) {
+func (db *blocksDB) LatestBlocks() (*Blocks, error) {
 	var header Blocks
 	result := db.gorm.Order("number DESC").Take(&header)
 	if result.Error != nil {
@@ -50,10 +48,10 @@ func (db *blocksDB) LatestBlocks() (*rpcclient.BlockHeader, error) {
 		}
 		return nil, result.Error
 	}
-	return (*rpcclient.BlockHeader)(&header), nil
+	return &header, nil
 }
 
-func (db *blocksDB) QueryBlocksByNumber(queryNumber *big.Int) (*rpcclient.BlockHeader, error) {
+func (db *blocksDB) QueryBlocksByNumber(queryNumber *big.Int) (*Blocks, error) {
 	var header Blocks
 	result := db.gorm.Table("blocks").Where("number = ?", queryNumber.Uint64()).Take(&header)
 	if result.Error != nil {
@@ -62,7 +60,7 @@ func (db *blocksDB) QueryBlocksByNumber(queryNumber *big.Int) (*rpcclient.BlockH
 		}
 		return nil, result.Error
 	}
-	return (*rpcclient.BlockHeader)(&header), nil
+	return &header, nil
 }
 
 func (db *blocksDB) DeleteBlocksByNumber(blockHeader []Blocks) error {
